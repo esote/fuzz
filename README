@@ -96,24 +96,24 @@ EXAMPLES
 ERRORS
 	fuzz_init() can fail with the following errors:
 
-	EINVAL	input, start, or end was NULL.
+	[EINVAL]	input, start, or end was NULL.
 
-	EINVAL	the string length of start or end was 0.
+	[EINVAL]	the string length of start or end was 0.
 
-	ENOMEM	unable to allocate memory for the fuzz structure.
+	[ENOMEM]	unable to allocate memory for the fuzz structure.
 
-	EINVAL	unable to parse a number in the fuzz token.
+	[EINVAL]	unable to parse a number in the fuzz token.
 
-	ERANGE	too many numbers in the fuzz token, or the random mode was out
-		of bounds.
+	[ERANGE]	too many numbers in the fuzz token, or the random mode
+			was out of bounds.
 
-	ERANGE	on systems where cryptographically insecure randomness must be
-		used, the number of bytes to generate (as specified in the fuzz
-		token) exceed RAND_MAX.
+	[ERANGE]	on systems where cryptographically insecure randomness
+			must be used, the number of bytes to generate (as
+			specified in the fuzz token) exceed RAND_MAX.
 
 	fuzz() can fail with the following errors:
 
-	EINVAL	f was NULL.
+	[EINVAL]	f was NULL.
 
 AUTHORS
 	fuzz was written by Esote.
