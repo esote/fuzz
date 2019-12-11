@@ -1,0 +1,138 @@
+NAME
+	fuzz_init, fuzz_free, fuzz - string fuzzing library
+
+SYNOPSIS
+	#include "fuzz.h"
+
+	struct fuzz *
+	fuzz_init(char const *input, char const *start, char const *end, char delim)
+
+	void
+	fuzz_free(struct fuzz *f)
+
+	char *
+	fuzz(struct fuzz *f, size_t *w)
+
+DESCRIPTION
+	fuzz is a library for versatile and high-performance string fuzzing. The
+	input string is parsed as a template containing text and "fuzz tokens."
+
+	"Fuzz tokens" may be in the following forms. For example, assume the
+	start string is "{{", the end string is "}}", and the delimiter is ','.
+
+		{{X,Y,Z}}	Use the random mode X to generate up to but less
+				than Y and at least Z random bytes.
+
+		{{X,Y}}		Use the random mode X to generate up to but less
+				than Y and at least 1 random bytes.
+
+		{{X}}		Use the random mode X to generate up to but less
+				than 10 and at least 1 random bytes.
+
+		{{}}		Use the random mode RAND_NO_NUL to generate up
+				to but less than 10 and at least 1 random bytes.
+
+	The random mode may be one of the following:
+
+		RAND_NO_NUL (0)	generate bytes in the range 1 to 255 (default).
+
+		RAND_ANY (1)	generate bytes in the range 0 to 255.
+
+		RAND_PRINT (2)	generate bytes in the ASCII range ' ' to '~'
+				(printable ASCII characters).
+
+	So the fuzz token "{{2,4,1}}" will instruct the fuzz engine to generate
+	1 to 3 bytes within the printable range of characters.
+
+	A fuzz structure may only be initialized once until it is freed.
+
+	fuzz() takes a fuzz structure and an optional w length pointer. If w is
+	not NULL, it will be set to the length of the returned string including
+	the NUL terminator.
+
+	The pointer to the string returned by fuzz() will change between calls.
+	If you wish to retain the string, copy it to your own buffer. The
+	pointer should NOT be freed, this is handled by fuzz_free().
+
+RETURN VALUES
+	fuzz_init() returns a pointer to the initialized struct fuzz. fuzz()
+	returns a pointer to the generated fuzz string. On failure they return
+	NULL with errno set to indicate the cause of the error.
+
+	fuzz_free() returns no value.
+
+EXAMPLES
+
+	The following code will generate (often invalid) HTTP request strings
+	with a random path and host.
+
+		#include <err.h>
+		#include <stdio.h>
+
+		#include "fuzz.h"
+
+		int
+		main(void)
+		{
+			char *tmpl;
+			char *s;
+			struct fuzz *f;
+
+			tmpl = "GET /[0,20,0] HTTP/1.1\nHost: []\n\n";
+
+			if ((f = fuzz_init(tmpl, "[", "]", ',')) == NULL) {
+				err(1, "fuzz_init");
+			}
+
+			if ((s = fuzz(f, NULL)) == NULL) {
+				err(1, "fuzz");
+			}
+
+			puts(s);
+
+			fuzz_free(f);
+		}
+
+ERRORS
+	fuzz_init() can fail with the following errors:
+
+	EINVAL	input, start, or end was NULL.
+
+	EINVAL	the string length of start or end was 0.
+
+	ENOMEM	unable to allocate memory for the fuzz structure.
+
+	EINVAL	unable to parse a number in the fuzz token.
+
+	ERANGE	too many numbers in the fuzz token, or the random mode was out
+		of bounds.
+
+	ERANGE	on systems where cryptographically insecure randomness must be
+		used, the number of bytes to generate (as specified in the fuzz
+		token) exceed RAND_MAX.
+
+	fuzz() can fail with the following errors:
+
+	EINVAL	f was NULL.
+
+AUTHORS
+	fuzz was written by Esote.
+
+COPYRIGHT
+	Copyright (c) 2019 Esote. There is NO warranty. You may redistribute
+	this software under the terms of the GNU Affero General Public License.
+	For more information, see the LICENSE file.
+
+SECURITY CONSIDERATIONS
+	On OpenBSD and FreeBSD, arc4random_uniform(3) is used to generate random
+	numbers. If the LIBBSD macro is defined, arc4random_uniform(3) is
+	included from <bsd/stdlib.h>.
+
+	Otherwise, if the LIBSODIUM macro is defined, randombytes_uniform() is
+	used. The user must take care to call sodium_init() themselves.
+
+	Finally, if none of these conditions are met, random numbers are
+	generated using rand(3). The user must take care to call srand(3)
+	themselves. The bytes generated will NOT be cryptographically random.
+
+	It is recommended to just use OpenBSD.

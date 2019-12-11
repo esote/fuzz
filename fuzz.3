@@ -1,0 +1,222 @@
+.\"
+.\" Copyright (C) 2019  Esote
+.\"
+.\" This program is free software: you can redistribute it and/or modify
+.\" it under the terms of the GNU Affero General Public License as published
+.\" by the Free Software Foundation, either version 3 of the License, or
+.\" (at your option) any later version.
+.\"
+.\" This program is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU Affero General Public License for more details.
+.\"
+.\" You should have received a copy of the GNU Affero General Public License
+.\" along with this program.  If not, see <https://www.gnu.org/licenses/>.
+.\"
+.Dd $Mdocdate: December 10 2019 $
+.Dt FUZZ 3
+.Os
+.Sh NAME
+.Nm fuzz_init ,
+.Nm fuzz_free ,
+.Nm fuzz
+.Nd string fuzzing library
+.Sh SYNOPSIS
+.In fuzz.h
+.Ft struct fuzz *
+.Fn fuzz_init "char const *input" "char const *start" "char const *end" "char delim"
+.Ft void
+.Fn fuzz_free "struct fuzz *f"
+.Ft char *
+.Fn fuzz "struct fuzz *f" "size_t *w"
+.Sh DESCRIPTION
+.Nm fuzz
+is a library for versatile and high-performance string fuzzing.
+The
+.Fa input
+string is parsed as a template containing text and
+.Dq fuzz tokens.
+.Pp
+.Dq Fuzz tokens
+may be in the following forms.
+For example, assume the start string is
+.Dq {{ ,
+the end string is
+.Dq {{ ,
+and the delimiter is
+.Sq \&, .
+.Pp
+.Bl -tag -width {{X,Y,Z}} -offset indent -compact
+.It Dv {{X,Y,Z}}
+Use the random mode X to generate up to but less than Y and at least Z random
+bytes.
+.It Dv {{X,Y}}
+Use the random mode X to generate up to but less than Y and at least 1 random
+bytes.
+.It Dv {{X}}
+Use the random mode X to generate up to but less than 10 and at least 1 random
+bytes.
+.It Dv {{}}
+Use the random mode
+.Dv RAND_NO_NUL
+to generate up to but less than 10 and at least 1 random bytes.
+.El
+.Pp
+The random mode may be one of the following
+.Bl -tag -width RAND_NO_NUL -offset -indent -compact
+.It Dv RAND_NO_NUL
+.Pq value 0
+generate bytes in the range 1 to 255
+.Pq default .
+.It Dv RAND_ANY
+.Pq value 1
+generate bytes in the range 0 to 255.
+.It Dv RAND_PRINT
+.Pq value 2
+generate bytes in the ASCII range
+.Sq \ \&
+to
+.Sq ~
+.Pq printable ASCII characters .
+.El
+.Pp
+So the fuzz token
+.Dq {{2,41}}
+will instruct the fuzz engine to generate 1 to 3 bytes within the printable
+range of characters.
+.Pp
+A fuzz structure may only be initialized once until it is freed.
+.Pp
+.Fn fuzz
+takes a fuzz structure and an optional
+.Fa w
+length pointer.
+If
+.Fa w
+is not NULL, it will be set to the length of the returned string include the NUL
+terminator.
+.Pp
+The pointer to the string returned by
+.Fn fuzz
+will change between calls.
+If you wish to retain the string, copy it to your own buffer.
+The pointer should NOT be freed, this is handled by
+.Fn fuzz_free .
+.Sh RETURN VALUES
+.Fn fuzz_init
+returns a pointer to the initialized fuzz structure.
+.Fn fuzz
+returns a pointer to the generated fuzz string.
+On failure they return NULL with
+.Va errno
+set to indicate the cause of the error.
+.Pp
+.Fn fuzz_free
+returns no value.
+.Sh EXAMPLES
+The following code will generate HTTP request strings with a random path and
+host.
+.Bd -literal -offset indent
+#include <err.h>
+#include <stdio.h>
+
+#include "fuzz.h"
+
+int
+main(void)
+{
+	char *tmpl;
+	char *s;
+	struct fuzz *f;
+
+	tmpl = "GET /[0,20,0] HTTP/1.1\\nHost: []\\n\\n";
+
+	if ((f = fuzz_init(tmpl, "[", "]", ',')) == NULL) {
+		err(1, "fuzz_init");
+	}
+
+	if ((s = fuzz(f, NULL)) == NULL) {
+		err(1, "fuzz");
+	}
+
+	puts(s);
+
+	fuzz_free(f);
+}
+.Ed
+.Sh ERRORS
+.Fn fuzz_init
+can fail with the following errors:
+.Bl -tag -width Er
+.It Bq Er EINVAL
+.Fa input ,
+.Fa start ,
+or
+.Fa end
+was NULL.
+.It Bq Er EINVAL
+the string length of
+.Fa start
+or
+.Fa end
+was 0.
+.It Bq Er ENOMEM
+unable to allocate memory for the fuzz structure.
+.It Bq Er EINVAL
+unable to parse a number in the fuzz token.
+.It Bq Er ERANGE
+too many numbers in the fuzz token, or the random mode was out of bounds.
+.It Bq Er ERANGE
+on systems where cryptographically insecure randomness must be used, the number
+of bytes to generate
+.Pq as specified in the fuzz token
+exceed
+.Dv RAND_MAX .
+.El
+.Pp
+.Fn fuzz
+can fail with the following errors:
+.Bl -tag -width Er
+.It Bq Er EINVAL
+.Fa f
+was NULL.
+.El
+.Sh AUTHORS
+.Nm fuzz
+was written by
+.An Esote
+.Sh COPYRIGHT
+Copyright (c) 2019 Esote.
+There is NO warranty.
+You may redistribute this software under the terms of the GNU Affero General
+Public License.
+For more information, see the LICENSE file.
+.Sh SECURITY CONSIDERATIONS
+On OpenBSD and FreeBSD,
+.Xr arc4random_uniform 3
+is used to generate random numbers.
+If the
+.Dv LIBBSD
+macro is defined,
+.Xr arc4random_uniform 3
+is included from
+.In bsd/stdlib.h .
+.Pp
+Otherwise, if the
+.Dv LIBSODIUM
+macro is defined,
+.Fn randombytes_uniform
+is used.
+The user must take care to call
+.Fn sodium_init
+themselves.
+.Pp
+Finally, if none of these conditions are met, random numbers are generated using
+.Xr rand 3 .
+The user must take care to call
+.Xr srand 3
+themselves.
+The bytes generated will NOT be cryptographically random.
+.Pp
+It is recommended to just use OpenBSD.
